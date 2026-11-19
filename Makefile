@@ -108,6 +108,8 @@ test: test-update-core test-update-win test-update-signature
 	./build/xenta_protocol_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/labels_test.cpp src/labels.cpp -o build/labels_test.exe
 	./build/labels_test.exe
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/duplicate_rules_test.cpp src/labels.cpp -o build/duplicate_rules_test.exe
+	./build/duplicate_rules_test.exe
 	$(CXX) $(CXXFLAGS) tests/brands_test.cpp src/brands.cpp -o build/brands_test.exe
 	./build/brands_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/xbox_bluetooth_identity_test.cpp -o build/xbox_bluetooth_identity_test.exe

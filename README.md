@@ -29,7 +29,7 @@ Battery levels of your wireless mouse, headset, keyboard and controller, right o
 
 **On the taskbar (default):** `🎧 30%  🖱 93%` next to the notification area, drawn with the Windows icon font.
 - **Low battery:** a red number means 15% or less.
-- **Charging:** a blue ⚡ appears next to the number. Once the device is fully charged and still on power, it turns into a green ✓. A device that charges on its cable shows up once: a dimmed copy of it from its receiver is hidden while it charges.
+- **Charging:** a blue ⚡ appears next to the number. Once the device is fully charged and still on power, it turns into a green ✓. A device that moves between its cable and its receiver (plugged in to charge, or unplugged again) shows up once: the dimmed copy it leaves behind is hidden while the same device answers under the other connection.
 - **Asleep:** dimmed text means the device is asleep and the last known value is shown.
 - **Disconnected (optional):** turn on *Show disconnected devices* to display a dimmed `×` for devices whose driver explicitly reports an offline wireless link. This does not infer disconnection from a missed battery poll; the default remains to hide offline devices.
 - **Two devices of one kind:** with two mice (or two controllers...) both would get the same icon, so each one gets a tiny caption of up to 3 letters in the corner of its icon, taken from its name (`MX`, `PRO`), or a number when the names do not tell them apart. A device that is alone in its kind shows no caption.

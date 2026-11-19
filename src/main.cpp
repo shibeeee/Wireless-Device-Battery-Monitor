@@ -22,6 +22,7 @@
 #include "i18n.h"
 #include "json_output.h"
 #include "labels.h"
+#include "duplicate_rules.h"
 #include "report.h"
 #include "rename_dialog.h"
 #include "widget.h"
@@ -200,17 +201,14 @@ bool IsEntryHidden(const TrayEntry& e) {
     if (IsHidden(e.st.key)) return true;
     // An explicitly offline device is not just a stale battery reading.
     if (g_showDisconnectedDevices && !e.st.connected) return false;
-    bool stale = e.st.asleep || (e.st.percent < 0 && e.lastPct >= 0);
+    bool stale = duplicates::IsStale(e.st, e.lastPct);
     if (g_hideLastKnown && stale) return true;
-    // A device plugged in to charge often shows up twice: live and charging on its cable, and as a
-    // dimmed last-known copy from its receiver. Show only the charging one.
-    if (stale && e.st.connected) {
-        for (const auto& [k, other] : g_entries)
-            if (&other != &e && other.st.kind == e.st.kind && other.st.connected && !other.st.asleep &&
-                other.st.percent >= 0 && other.st.charging && !IsHidden(k) && SameDeviceName(other.st.name, e.st.name))
-                return true;
-    }
-    return false;
+    if (!stale) return false;
+    // A device moving between its cable and its receiver leaves a dimmed copy behind (see duplicate_rules.h).
+    std::vector<const DeviceStatus*> others;
+    for (const auto& [k, other] : g_entries)
+        if (&other != &e && !IsHidden(k)) others.push_back(&other.st);
+    return duplicates::HiddenByLiveTwin(e.st, e.lastPct, others);
 }
 
 bool LoadBoolSetting(const wchar_t* name, bool defaultVal) {
@@ -646,6 +644,8 @@ void OnResults(std::vector<DeviceStatus>& results) {
         if (inGrace) {
             e.st.percent = -1;
             e.st.asleep = true;
+            e.st.charging = false;  // a last-known value must not keep a charging bolt or a full check
+            e.st.full = false;
             ApplyEntry(e);
         }
         if (!seen.count(it->first) && !inGrace) {
@@ -656,8 +656,8 @@ void OnResults(std::vector<DeviceStatus>& results) {
             ++it;
         }
     }
-    // Tray icons whose visibility depends on another device (a stale copy of one that now charges, or
-    // stops charging) may have been applied before that device was updated above.
+    // Tray icons whose visibility depends on another entry (a stale copy of a device that is now live
+    // elsewhere) may have been applied before that entry was updated above.
     for (auto& [k, e] : g_entries)
         if (e.added != (!g_useWidget && !IsEntryHidden(e) && (e.st.connected || g_showDisconnectedDevices))) ApplyEntry(e);
     UpdatePlaceholder();
