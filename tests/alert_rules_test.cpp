@@ -10,13 +10,13 @@ int main() {
     std::map<std::wstring, int> prefs;
     const std::wstring mouse = L"mouse:key";
     const std::wstring headset = L"headset:key";
-    assert(EffectiveThreshold(prefs, mouse) == 15);
+    assert(EffectiveThreshold(prefs, mouse) == kDisabled);  // alerts are off by default
     assert(OverrideFor(prefs, mouse) == kUseDefault);
     prefs[mouse] = 20;
     prefs[headset] = kDisabled;
     assert(EffectiveThreshold(prefs, mouse) == 20);
     assert(EffectiveThreshold(prefs, headset) == kDisabled);
-    assert(EffectiveThreshold(prefs, L"other:key") == 15);
+    assert(EffectiveThreshold(prefs, L"other:key") == kDisabled);
     assert(ValidOverride(kDisabled));
     for (int n : kThresholds) assert(ValidOverride(n));
     assert(!ValidOverride(0) && !ValidOverride(51) && !ValidOverride(kUseDefault));

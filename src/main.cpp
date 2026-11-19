@@ -54,7 +54,7 @@ enum MenuId : UINT {
 };
 enum DeviceCmd : UINT {
     DEV_TOGGLE, DEV_LEFT, DEV_RIGHT, DEV_RENAME, DEV_RESET_NAME, DEV_HISTORY,
-    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_ALERT_OFF, DEV_STRIDE = 16
+    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_STRIDE = 16
 };
 
 const wchar_t* kAppName = L"BatteryHub";
@@ -200,7 +200,17 @@ bool IsEntryHidden(const TrayEntry& e) {
     if (IsHidden(e.st.key)) return true;
     // An explicitly offline device is not just a stale battery reading.
     if (g_showDisconnectedDevices && !e.st.connected) return false;
-    return g_hideLastKnown && (e.st.asleep || (e.st.percent < 0 && e.lastPct >= 0));
+    bool stale = e.st.asleep || (e.st.percent < 0 && e.lastPct >= 0);
+    if (g_hideLastKnown && stale) return true;
+    // A device plugged in to charge often shows up twice: live and charging on its cable, and as a
+    // dimmed last-known copy from its receiver. Show only the charging one.
+    if (stale && e.st.connected) {
+        for (const auto& [k, other] : g_entries)
+            if (&other != &e && other.st.kind == e.st.kind && other.st.connected && !other.st.asleep &&
+                other.st.percent >= 0 && other.st.charging && !IsHidden(k))
+                return true;
+    }
+    return false;
 }
 
 bool LoadBoolSetting(const wchar_t* name, bool defaultVal) {
@@ -831,10 +841,9 @@ void ShowMenu() {
                     base + DEV_RESET_NAME, T(L"Reset to original name"));
         HMENU alertMenu = CreatePopupMenu();
         int selectedThreshold = alerts::OverrideFor(g_alertOverrides, k);
-        AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kUseDefault ? MF_CHECKED : 0),
-                    base + DEV_ALERT_DEFAULT, T(L"Use default (15%)"));
-        AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kDisabled ? MF_CHECKED : 0),
-                    base + DEV_ALERT_OFF, T(L"Disable notifications"));
+        bool alertsOff = selectedThreshold == alerts::kUseDefault || selectedThreshold == alerts::kDisabled;
+        AppendMenuW(alertMenu, MF_STRING | (alertsOff ? MF_CHECKED : 0), base + DEV_ALERT_DEFAULT,
+                    T(L"Disable notifications"));
         AppendMenuW(alertMenu, MF_SEPARATOR, 0, nullptr);
         for (int i = 0; i < alerts::kThresholdCount; ++i) {
             int level = alerts::kThresholds[i];
@@ -967,7 +976,6 @@ void ShowMenu() {
                     case DEV_RENAME: RenameDevice(key); break;
                     case DEV_RESET_NAME: ResetDeviceName(key); break;
                     case DEV_ALERT_DEFAULT: SetAlertOverride(key, alerts::kUseDefault); break;
-                    case DEV_ALERT_OFF: SetAlertOverride(key, alerts::kDisabled); break;
                     case DEV_HISTORY: {
                         auto it = g_entries.find(key);
                         if (it != g_entries.end())

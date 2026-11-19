@@ -7,9 +7,9 @@
 #include <string>
 
 namespace alerts {
-constexpr int kDefaultThreshold = 15;
 constexpr int kUseDefault = -2;   // no per-device override persisted
 constexpr int kDisabled = -1;     // notifications disabled for this device
+constexpr int kDefaultThreshold = kDisabled;  // off unless a device picks a level
 constexpr int kThresholds[] = {5, 10, 15, 20, 25, 30, 35, 40};
 constexpr int kThresholdCount = sizeof(kThresholds) / sizeof(kThresholds[0]);
 
