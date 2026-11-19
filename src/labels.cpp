@@ -98,3 +98,14 @@ std::vector<std::wstring> ShortLabels(const std::vector<LabelInput>& items, size
     }
     return out;
 }
+
+bool SameDeviceName(const std::wstring& a, const std::wstring& b) {
+    auto key = [](const std::wstring& name) {
+        std::vector<std::wstring> words = Words(name);
+        for (auto& w : words)
+            for (auto& c : w) c = (wchar_t)towlower(c);
+        return words;
+    };
+    std::vector<std::wstring> wa = key(a);
+    return !wa.empty() && wa == key(b);
+}

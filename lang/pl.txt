@@ -11,7 +11,6 @@ asleep = uśpione
 No devices with battery info found = Nie znaleziono urządzeń z informacją o baterii
 Low battery = Słaba bateria
 Battery alerts = Powiadomienia o baterii
-Use default (15%) = Domyślnie (15%)
 Disable notifications = Wyłącz powiadomienia
 {name} is at {percent}% = {name}: {percent}%
 Point at a device to show, hide or move it = Wskaż urządzenie, aby je pokazać, ukryć lub przesunąć

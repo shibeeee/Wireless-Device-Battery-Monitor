@@ -17,7 +17,6 @@ asleep =
 No devices with battery info found = 
 Low battery = 
 Battery alerts =
-Use default (15%) =
 Disable notifications =
 {name} is at {percent}% = 
 Point at a device to show, hide or move it = 

@@ -1,11 +1,83 @@
 #include "../src/drivers/sony_headphones_protocol.h"
 
 #include <cassert>
+#include <algorithm>
 #include <cstdio>
 #include <vector>
 
 using Bytes = std::vector<std::uint8_t>;
 using namespace SonyHeadphones;
+
+// A pretend WH-1000XM6: ACKs every command with the next sequence number and answers the
+// read-only queries. `thresholdOnly` firmware ACKs the plain battery query but never answers it.
+struct FakeHeadphones {
+    bool thresholdOnly = false;
+    bool ignorePlain = false;     // drops the plain battery query entirely: no ACK, no reply
+    bool replyBeforeAck = false;  // some links deliver the reply ahead of the ACK
+    bool table2Noise = false;     // a table-2 notification arrives before the protocol info reply
+    int level = 64;
+    std::uint8_t status = 0;
+    std::uint8_t mySeq = 0;
+    std::vector<std::uint8_t> commandSeqs;  // seq of every command received, in order
+    int acksReceived = 0;
+    Bytes pending;
+
+    Bytes Feed(const Bytes& in) {
+        pending.insert(pending.end(), in.begin(), in.end());
+        std::vector<Frame> frames;
+        pending.erase(pending.begin(), pending.begin() + (std::ptrdiff_t)ParseFrames(pending.data(), pending.size(), frames));
+        Bytes out;
+        auto add = [&](const Bytes& b) { out.insert(out.end(), b.begin(), b.end()); };
+        for (const Frame& f : frames) {
+            if (f.type == kTypeAck) { acksReceived++; continue; }
+            commandSeqs.push_back(f.seq);
+            if (ignorePlain && f.payload.size() == 2 && f.payload[0] == kPowerGetStatus && f.payload[1] == kBattery) continue;
+            Bytes ack = Ack(f.seq), reply;
+            const Bytes& p = f.payload;
+            if (p.size() == 2 && p[0] == kProtocolInfoGet) {
+                if (table2Noise) add(Encode(kTypeCommand2, mySeq, { 0x29, 0x01 })), mySeq = (std::uint8_t)(1 - mySeq);
+                reply = Encode(kTypeCommand, mySeq, { 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00 });
+            } else if (p.size() == 2 && p[0] == kPowerGetStatus && p[1] == kBattery && !thresholdOnly) {
+                reply = Encode(kTypeCommand, mySeq, { kPowerRetStatus, kBattery, (std::uint8_t)level, status });
+            } else if (p.size() == 2 && p[0] == kPowerGetStatus && p[1] == kBatteryWithThreshold) {
+                reply = Encode(kTypeCommand, mySeq, { kPowerRetStatus, kBatteryWithThreshold, (std::uint8_t)level, status, 20 });
+            }
+            if (!reply.empty()) mySeq = (std::uint8_t)(1 - mySeq);
+            if (replyBeforeAck) { add(reply); add(ack); }
+            else { add(ack); add(reply); }
+        }
+        return out;
+    }
+};
+
+// Drives a Session against the fake the way the driver does, delivering bytes `chunk` at a time.
+// Returns false if it did not finish within `budgetMs` of simulated time.
+static bool Converse(FakeHeadphones& hp, Battery& result, std::size_t chunk = 512, std::uint64_t budgetMs = 1500) {
+    Session session;
+    Bytes toHp = session.Begin();
+    for (std::uint64_t now = 0; now < budgetMs && !session.Done(); now += 50) {
+        Bytes q = session.Poll(now);
+        toHp.insert(toHp.end(), q.begin(), q.end());
+        Bytes fromHp = hp.Feed(toHp);
+        toHp.clear();
+        for (std::size_t i = 0; i < fromHp.size(); i += chunk) {
+            std::size_t n = std::min(chunk, fromHp.size() - i);
+            Bytes acks = session.Receive(fromHp.data() + i, n);
+            toHp.insert(toHp.end(), acks.begin(), acks.end());
+        }
+        hp.Feed(toHp);  // our ACKs
+        toHp.clear();
+    }
+    if (!session.Done()) return false;
+    result = session.Result();
+    return true;
+}
+
+static bool Alternates(const std::vector<std::uint8_t>& seqs) {
+    for (std::size_t i = 0; i < seqs.size(); ++i)
+        if (seqs[i] != (i % 2)) return false;
+    return true;
+}
 
 int main() {
     // Protocol info query, seq 0: 0C 00 00000002 00 00, checksum 0x0E.
@@ -60,11 +132,71 @@ int main() {
         assert(frames.size() == 1 && !ParseBattery(frames[0], b));
     }
 
+    // Both MDR tables are ACKed, an ACK is not.
+    Frame f2;
+    f2.type = kTypeCommand2;
+    assert(NeedsAck(f2) && NeedsAck(frames[0]));
+    f2.type = kTypeAck;
+    assert(!NeedsAck(f2));
+
     // Protocol info reply is recognised.
     Bytes info = Encode(kTypeCommand, 0, { 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00 });
     frames.clear();
     ParseFrames(info.data(), info.size(), frames);
     assert(frames.size() == 1 && IsProtocolInfoReply(frames[0]));
+
+    // Whole conversations against the pretend headphones.
+    {
+        FakeHeadphones hp;
+        hp.status = 1;
+        Battery r;
+        assert(Converse(hp, r));
+        assert(r.level == 64 && r.charging && !r.full);
+        assert(hp.commandSeqs.size() == 2 && Alternates(hp.commandSeqs));  // info, battery
+        assert(hp.acksReceived == 2);                                     // both replies ACKed
+    }
+    {   // Firmware that only answers the "with threshold" query: the fallback is sent after the retry
+        // delay, with the next sequence number even though the first query got no reply.
+        FakeHeadphones hp;
+        hp.thresholdOnly = true;
+        hp.level = 35;
+        hp.status = 3;
+        Battery r;
+        assert(Converse(hp, r));
+        assert(r.level == 35 && !r.charging && r.full);
+        assert(hp.commandSeqs.size() == 3 && Alternates(hp.commandSeqs));
+    }
+    {   // The plain query is dropped without an ACK: the fallback still gets a fresh sequence number.
+        FakeHeadphones hp;
+        hp.ignorePlain = true;
+        hp.level = 50;
+        Battery r;
+        assert(Converse(hp, r));
+        assert(r.level == 50);
+        assert(hp.commandSeqs.size() == 3 && Alternates(hp.commandSeqs));
+    }
+    {   // The fallback waits for the retry delay, so a short budget gives up cleanly.
+        FakeHeadphones hp;
+        hp.thresholdOnly = true;
+        Battery r;
+        assert(!Converse(hp, r, 512, Session::kRetryMs - 100));
+    }
+    {   // Reply ahead of the ACK, a table-2 notification first, and one byte per read.
+        FakeHeadphones hp;
+        hp.replyBeforeAck = true;
+        hp.table2Noise = true;
+        hp.level = 9;
+        Battery r;
+        assert(Converse(hp, r, 1));
+        assert(r.level == 9 && !r.charging);
+        assert(Alternates(hp.commandSeqs));
+        assert(hp.acksReceived == 3);  // the notification is ACKed too
+    }
+    {   // Headphones that never answer: no battery query is sent and nothing is reported.
+        Session session;
+        session.Begin();
+        assert(session.Poll(0).empty() && session.Poll(5000).empty() && !session.Done());
+    }
 
     // A bad checksum or a wrong length is dropped.
     Bytes bad = reply;

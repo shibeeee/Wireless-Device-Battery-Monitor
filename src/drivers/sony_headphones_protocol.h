@@ -5,7 +5,7 @@
 // Frame:  3E [escaped: type, seq, len (4 bytes, big endian), payload..., checksum] 3C
 //   checksum = 8-bit sum of type, seq, len and payload
 //   escape   = 3C / 3D / 3E inside the frame are sent as 3D followed by (byte & 0xEF)
-//   type     = 0x01 ACK (no payload), 0x0C MDR command / reply
+//   type     = 0x01 ACK (no payload), 0x0C MDR command / reply, 0x0E second MDR table (notifications)
 //   ACK      = sent for every received command, with seq = 1 - (that command's seq); the
 //              headphones' ACK carries the seq to use for the next command.
 // Read-only commands used here:
@@ -28,6 +28,7 @@ constexpr std::uint8_t kEscapeMask = 0xEF;
 
 constexpr std::uint8_t kTypeAck = 0x01;
 constexpr std::uint8_t kTypeCommand = 0x0C;
+constexpr std::uint8_t kTypeCommand2 = 0x0E;
 
 constexpr std::uint8_t kProtocolInfoGet = 0x00;
 constexpr std::uint8_t kProtocolInfoRet = 0x01;
@@ -122,6 +123,9 @@ inline std::size_t ParseFrames(const std::uint8_t* data, std::size_t size, std::
     return used;
 }
 
+// Every frame except an ACK must be acknowledged, or the headphones send it again.
+inline bool NeedsAck(const Frame& f) { return f.type == kTypeCommand || f.type == kTypeCommand2; }
+
 inline bool IsProtocolInfoReply(const Frame& f) {
     return f.type == kTypeCommand && !f.payload.empty() && f.payload[0] == kProtocolInfoRet;
 }
@@ -137,5 +141,58 @@ inline bool ParseBattery(const Frame& f, Battery& out) {
     out.full = p[3] == 3;
     return true;
 }
+
+// The whole read-only conversation, independent of sockets and clocks so it can be tested:
+//   1. Begin(): the protocol info query (seq 0), as the official app does first.
+//   2. Once the headphones answer it, Poll() hands out the plain battery query; if that stays
+//      unanswered for kRetryMs, the "with threshold" variant used by newer firmware.
+//   3. Receive() takes whatever bytes arrived and returns the ACKs to send back.
+// The sequence number alternates 0, 1, 0 ... with every command we send (each ACK the headphones
+// send back carries exactly that next number).
+class Session {
+public:
+    static constexpr std::uint64_t kRetryMs = 600;
+
+    std::vector<std::uint8_t> Begin() {
+        seq_ = 0;
+        return ProtocolInfoQuery(seq_);
+    }
+
+    std::vector<std::uint8_t> Poll(std::uint64_t nowMs) {
+        static constexpr std::uint8_t kTypes[] = { kBattery, kBatteryWithThreshold };
+        if (done_ || !ready_ || sent_ >= 2 || (sent_ > 0 && nowMs - sentAt_ < kRetryMs)) return {};
+        seq_ = (std::uint8_t)(1 - seq_);
+        sentAt_ = nowMs;
+        return BatteryQuery(seq_, kTypes[sent_++]);
+    }
+
+    std::vector<std::uint8_t> Receive(const std::uint8_t* data, std::size_t size) {
+        buf_.insert(buf_.end(), data, data + size);
+        std::vector<Frame> frames;
+        buf_.erase(buf_.begin(), buf_.begin() + (std::ptrdiff_t)ParseFrames(buf_.data(), buf_.size(), frames));
+        if (buf_.size() > 8192) buf_.clear();  // garbage without an end marker
+        std::vector<std::uint8_t> out;
+        for (const Frame& f : frames) {
+            if (!NeedsAck(f)) continue;
+            std::vector<std::uint8_t> ack = Ack(f.seq);
+            out.insert(out.end(), ack.begin(), ack.end());
+            if (IsProtocolInfoReply(f)) ready_ = true;
+            else if (!done_ && ParseBattery(f, battery_)) done_ = true;
+        }
+        return out;
+    }
+
+    bool Done() const { return done_; }
+    const Battery& Result() const { return battery_; }
+
+private:
+    std::vector<std::uint8_t> buf_;
+    Battery battery_;
+    std::uint64_t sentAt_ = 0;
+    int sent_ = 0;
+    std::uint8_t seq_ = 0;
+    bool ready_ = false;
+    bool done_ = false;
+};
 
 }  // namespace SonyHeadphones

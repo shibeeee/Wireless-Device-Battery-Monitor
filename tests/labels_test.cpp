@@ -42,6 +42,17 @@ int main() {
            { { K::Mouse, L"Wireless Mouse" }, { K::Mouse, L"Gaming Mouse" } }, { L"Wir", L"Gam" });
     Expect("maker is skipped case-insensitively", { { K::Mouse, L"LOGITECH Pebble" }, { K::Mouse, L"logitech Lift" } }, { L"Peb", L"Lif" });
     Expect("nothing to caption", {}, {});
+    auto same = [](const char* what, const wchar_t* a, const wchar_t* b, bool want) {
+        if (SameDeviceName(a, b) != want) {
+            failures++;
+            printf("FAIL %s\n", what);
+        }
+    };
+    same("receiver and cable names of one mouse", L"Razer Viper Ultimate", L"Razer Viper Ultimate Wireless", true);
+    same("case does not matter", L"VIPER V2 PRO", L"Razer Viper V2 Pro", true);
+    same("different models", L"Razer Viper V2 Pro", L"Razer Viper V3 Pro", false);
+    same("generic words alone are not a match", L"Wireless Mouse", L"Gaming Mouse", false);
+    same("empty names never match", L"", L"", false);
     if (!failures) printf("labels_test: all passed\n");
     return failures ? 1 : 0;
 }

@@ -17,3 +17,8 @@ struct LabelInput {
 // generic words like "Wireless" or "Mouse" are skipped), then more words, then a trailing number in the
 // name ("Xbox controller 2" -> "2"), and finally 1, 2, 3... in input order (two identical "DualSense").
 std::vector<std::wstring> ShortLabels(const std::vector<LabelInput>& items, size_t maxChars = 3);
+
+// True when two device names are the same once maker and generic words ("Razer", "Wireless", "USB",
+// "Receiver"...) are left out, ignoring case: the same device reported twice, e.g. once by its
+// receiver and once on its charging cable ("Razer Viper Ultimate" / "Razer Viper Ultimate Wireless").
+bool SameDeviceName(const std::wstring& a, const std::wstring& b);

@@ -207,7 +207,7 @@ bool IsEntryHidden(const TrayEntry& e) {
     if (stale && e.st.connected) {
         for (const auto& [k, other] : g_entries)
             if (&other != &e && other.st.kind == e.st.kind && other.st.connected && !other.st.asleep &&
-                other.st.percent >= 0 && other.st.charging && !IsHidden(k))
+                other.st.percent >= 0 && other.st.charging && !IsHidden(k) && SameDeviceName(other.st.name, e.st.name))
                 return true;
     }
     return false;
@@ -656,6 +656,10 @@ void OnResults(std::vector<DeviceStatus>& results) {
             ++it;
         }
     }
+    // Tray icons whose visibility depends on another device (a stale copy of one that now charges, or
+    // stops charging) may have been applied before that device was updated above.
+    for (auto& [k, e] : g_entries)
+        if (e.added != (!g_useWidget && !IsEntryHidden(e) && (e.st.connected || g_showDisconnectedDevices))) ApplyEntry(e);
     UpdatePlaceholder();
     UpdateWidget();
 }
