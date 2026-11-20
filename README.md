@@ -29,7 +29,7 @@ Battery levels of your wireless mouse, headset, keyboard and controller, right o
 
 **On the taskbar (default):** `🎧 30%  🖱 93%` next to the notification area, drawn with the Windows icon font.
 - **Low battery:** a red number means 15% or less.
-- **Charging:** a blue ⚡ appears next to the number. Once the device is fully charged and still on power, it turns into a green ✓.
+- **Charging:** a blue ⚡ appears next to the number. Once the device is fully charged and still on power, it turns into a green ✓. A device that moves between its cable and its receiver (plugged in to charge, or unplugged again) shows up once: the dimmed copy it leaves behind is hidden while the same device answers under the other connection.
 - **Asleep:** dimmed text means the device is asleep and the last known value is shown.
 - **Disconnected (optional):** turn on *Show disconnected devices* to display a dimmed `×` for devices whose driver explicitly reports an offline wireless link. This does not infer disconnection from a missed battery poll; the default remains to hide offline devices.
 - **Two devices of one kind:** with two mice (or two controllers...) both would get the same icon, so each one gets a tiny caption of up to 3 letters in the corner of its icon, taken from its name (`MX`, `PRO`), or a number when the names do not tell them apart. A device that is alone in its kind shows no caption.
@@ -58,10 +58,9 @@ Hover for details. Click for the menu: every device (click one to hide or show i
 
 ## Smart Battery Alerts (experimental)
 
-You can set a **per-device low-battery notification threshold** from each device's
-submenu: **Battery alerts** → *Use default (15%)*, *Disable notifications*,
-or one of 5%, 10%, 15%, 20%, 25%, 30%, 35%, 40%. The existing 15% default stays
-unchanged unless you choose an override. Settings are stored by device key in
+Low-battery notifications are **off by default**: the battery levels stay on the taskbar
+only. To turn them on for one device, open its submenu: **Battery alerts** → one of
+5%, 10%, 15%, 20%, 25%, 30%, 35%, 40%; *Disable notifications* turns them off again. Settings are stored by device key in
 the current user's Windows registry (`Software\WirelessBattery`, `AlertThresholds`).
 
 An alert is triggered only from a real, fresh 0–100% battery reading when the
@@ -189,6 +188,7 @@ Turn off **Record battery history** in the menu to stop saving readings; what wa
 | **8BitDo** | Ultimate 2 Wireless (X-input `2DC8:310B` tested on 2.4 GHz dongle, D-input `2DC8:6012` firmware 1.03+), Ultimate 2C Wireless, Ultimate 3-mode, Ultimate 2.4G, Ultimate Bluetooth, Pro 3, Pro 2, SN30 Pro, SF30 Pro | Vendor HID status query (`FF7A`/`FFA0`) and SDL gamepad input report `01`/`04`, with charging state |
 | **Samsung** | Galaxy Buds, Buds+, Buds Live, Buds Pro, Buds2, Buds2 Pro, Buds FE, Buds Core, Buds3 / Buds3 Pro / Buds3 FE (Bluetooth) | Status frame the earbuds push on Samsung's RFCOMM (SPP) service, read-only. The tray shows the lower earbud; the tooltip lists left, right and case. The Galaxy Buds app must be closed |
 | **Nothing / CMF** | Nothing Ear (3a) (tested), Ear (a), Ear (2), Ear, CMF Buds (Bluetooth) | Read-only `0xC007` battery query on Nothing's NT Link RFCOMM service (`aeac4a03-dff5-498f-843a-34487cf133eb`). The tray shows the lower earbud; the tooltip lists left, right and case |
+| **Sony headphones** | WH-1000XM6 (Bluetooth; not yet tested on real hardware) | Read-only protocol info and battery queries on Sony's "MDR" RFCOMM service (`956c7b26-d49a-4ba8-b03f-b17d393cb6e2`), the one the Sound Connect app uses. If a reading fails (for example another app on the PC holds that channel), Windows' own Bluetooth level is shown in the same place |
 | **Akko** | Akko Air 01 (`3151:5006`, 2.4 GHz receiver, tested) and Akko V9 Dash Pro (`38EE:000C`, 2.4 GHz receiver, tested) | Air 01: Rongyuan `0xF7` status report; V9 Dash Pro: read-only 64-byte `0x1A` status query on `FF1C:0092` with charging state |
 | **Sony** | DualShock 4, DualSense, DualSense Edge (USB, Bluetooth, wireless adapter); INZONE H9 II and H5 headsets | Input report; INZONE vendor protocol |
 | **MOONDROP** | GM01 Pro headset on its 2.4 GHz dongle (`35D8:0133`); on its USB cable it shows as charging with the last level | WalkPlay vendor read command on report `4B` (read-only) |
@@ -424,6 +424,7 @@ App icon by [nik-txt](https://github.com/nik-txt) ([`res/app.svg`](res/app.svg))
 
 The protocols come from these projects' research:
 
+- [SonyHeadphonesClient](https://github.com/mos9527/SonyHeadphonesClient) (mos9527) and [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge): Sony WH-1000XM6 "MDR" framing and battery query
 - [Google Fast Pair specification](https://developers.google.com/nearby/fast-pair/specifications/extensions/batterynotification): left / right / case battery broadcasts of Fast Pair earbuds
 - [HeadsetControl Astro drivers](https://github.com/Sapd/HeadsetControl/blob/master/lib/devices/logitech_astro_a50.hpp), [eh-fifty](https://github.com/tdryer/eh-fifty), and [AstroBar](https://github.com/nichtlegacy/AstroBar): Astro A50 X / Gen 5 / Gen 4 / Gen 3 / A20 battery protocols; [OpenAstroCC](https://github.com/BenStein1/OpenAstroCC): A50 Gen 3 `0x72` status read
 

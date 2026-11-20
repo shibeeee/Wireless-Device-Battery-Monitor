@@ -22,6 +22,7 @@
 #include "i18n.h"
 #include "json_output.h"
 #include "labels.h"
+#include "duplicate_rules.h"
 #include "report.h"
 #include "rename_dialog.h"
 #include "widget.h"
@@ -54,7 +55,7 @@ enum MenuId : UINT {
 };
 enum DeviceCmd : UINT {
     DEV_TOGGLE, DEV_LEFT, DEV_RIGHT, DEV_RENAME, DEV_RESET_NAME, DEV_HISTORY,
-    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_ALERT_OFF, DEV_STRIDE = 16
+    DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_STRIDE = 16
 };
 
 const wchar_t* kAppName = L"BatteryHub";
@@ -200,7 +201,14 @@ bool IsEntryHidden(const TrayEntry& e) {
     if (IsHidden(e.st.key)) return true;
     // An explicitly offline device is not just a stale battery reading.
     if (g_showDisconnectedDevices && !e.st.connected) return false;
-    return g_hideLastKnown && (e.st.asleep || (e.st.percent < 0 && e.lastPct >= 0));
+    bool stale = duplicates::IsStale(e.st, e.lastPct);
+    if (g_hideLastKnown && stale) return true;
+    if (!stale) return false;
+    // A device moving between its cable and its receiver leaves a dimmed copy behind (see duplicate_rules.h).
+    std::vector<const DeviceStatus*> others;
+    for (const auto& [k, other] : g_entries)
+        if (&other != &e && !IsHidden(k)) others.push_back(&other.st);
+    return duplicates::HiddenByLiveTwin(e.st, e.lastPct, others);
 }
 
 bool LoadBoolSetting(const wchar_t* name, bool defaultVal) {
@@ -636,6 +644,8 @@ void OnResults(std::vector<DeviceStatus>& results) {
         if (inGrace) {
             e.st.percent = -1;
             e.st.asleep = true;
+            e.st.charging = false;  // a last-known value must not keep a charging bolt or a full check
+            e.st.full = false;
             ApplyEntry(e);
         }
         if (!seen.count(it->first) && !inGrace) {
@@ -646,6 +656,10 @@ void OnResults(std::vector<DeviceStatus>& results) {
             ++it;
         }
     }
+    // Tray icons whose visibility depends on another entry (a stale copy of a device that is now live
+    // elsewhere) may have been applied before that entry was updated above.
+    for (auto& [k, e] : g_entries)
+        if (e.added != (!g_useWidget && !IsEntryHidden(e) && (e.st.connected || g_showDisconnectedDevices))) ApplyEntry(e);
     UpdatePlaceholder();
     UpdateWidget();
 }
@@ -831,10 +845,9 @@ void ShowMenu() {
                     base + DEV_RESET_NAME, T(L"Reset to original name"));
         HMENU alertMenu = CreatePopupMenu();
         int selectedThreshold = alerts::OverrideFor(g_alertOverrides, k);
-        AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kUseDefault ? MF_CHECKED : 0),
-                    base + DEV_ALERT_DEFAULT, T(L"Use default (15%)"));
-        AppendMenuW(alertMenu, MF_STRING | (selectedThreshold == alerts::kDisabled ? MF_CHECKED : 0),
-                    base + DEV_ALERT_OFF, T(L"Disable notifications"));
+        bool alertsOff = selectedThreshold == alerts::kUseDefault || selectedThreshold == alerts::kDisabled;
+        AppendMenuW(alertMenu, MF_STRING | (alertsOff ? MF_CHECKED : 0), base + DEV_ALERT_DEFAULT,
+                    T(L"Disable notifications"));
         AppendMenuW(alertMenu, MF_SEPARATOR, 0, nullptr);
         for (int i = 0; i < alerts::kThresholdCount; ++i) {
             int level = alerts::kThresholds[i];
@@ -967,7 +980,6 @@ void ShowMenu() {
                     case DEV_RENAME: RenameDevice(key); break;
                     case DEV_RESET_NAME: ResetDeviceName(key); break;
                     case DEV_ALERT_DEFAULT: SetAlertOverride(key, alerts::kUseDefault); break;
-                    case DEV_ALERT_OFF: SetAlertOverride(key, alerts::kDisabled); break;
                     case DEV_HISTORY: {
                         auto it = g_entries.find(key);
                         if (it != g_entries.end())

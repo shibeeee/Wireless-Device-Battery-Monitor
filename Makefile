@@ -100,12 +100,16 @@ test: test-update-core test-update-win test-update-signature
 	./build/hyperx_stinger_driver_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/galaxy_buds_protocol_test.cpp -o build/galaxy_buds_protocol_test.exe
 	./build/galaxy_buds_protocol_test.exe
+	$(CXX) -std=c++17 -O2 -Wall tests/sony_headphones_protocol_test.cpp -o build/sony_headphones_protocol_test.exe
+	./build/sony_headphones_protocol_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/logitech_g435_0adf_test.cpp -o build/logitech_g435_0adf_test.exe
 	./build/logitech_g435_0adf_test.exe
 	$(CXX) -std=c++17 -O2 -Wall -Isrc tests/xenta_protocol_test.cpp src/drivers/xenta_protocol.cpp -o build/xenta_protocol_test.exe
 	./build/xenta_protocol_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/labels_test.cpp src/labels.cpp -o build/labels_test.exe
 	./build/labels_test.exe
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/duplicate_rules_test.cpp src/labels.cpp -o build/duplicate_rules_test.exe
+	./build/duplicate_rules_test.exe
 	$(CXX) $(CXXFLAGS) tests/brands_test.cpp src/brands.cpp -o build/brands_test.exe
 	./build/brands_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/xbox_bluetooth_identity_test.cpp -o build/xbox_bluetooth_identity_test.exe
